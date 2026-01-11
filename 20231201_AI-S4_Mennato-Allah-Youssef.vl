@@ -1,0 +1,414 @@
+module logic_unit(A, B, not_out, or_out, and_out, nand_out);
+  input [7:0]A, B;
+  output [7:0]not_out, or_out, and_out, nand_out;
+  
+  not not_gates[7:0] (not_out, A);
+  or or_gates[7:0] (or_out, A, B);
+  and and_gates[7:0] (and_out, A, B);
+  nand nand_gates[7:0] (nand_out, A, B);
+
+endmodule
+
+
+module half_adder(input a, input b, output sum, output carry);
+  xor(sum, a, b);
+  and(carry, a, b);
+endmodule
+
+
+module full_adder(input x, input y, input z, output sum, output carry);
+wire s1, c1, c2;
+  half_adder h1( x, y, s1, c1);
+  half_adder h2(s1, z, sum, c2);
+or(carry, c1, c2);
+endmodule
+
+
+module adder_8bit(a, b, cin, sum, cout, carry_into_msb);
+  input [7:0]a, b;
+  input cin;
+  output [7:0]sum;
+  output cout;
+  output carry_into_msb;
+  wire [6:0] carry;
+  
+    full_adder fa0(a[0], b[0], cin,        sum[0], carry[0]);
+    full_adder fa1(a[1], b[1], carry[0],   sum[1], carry[1]);
+    full_adder fa2(a[2], b[2], carry[1],   sum[2], carry[2]);
+    full_adder fa3(a[3], b[3], carry[2],   sum[3], carry[3]);
+    full_adder fa4(a[4], b[4], carry[3],   sum[4], carry[4]);
+    full_adder fa5(a[5], b[5], carry[4],   sum[5], carry[5]);
+    full_adder fa6(a[6], b[6], carry[5],   sum[6], carry[6]);
+    full_adder fa7(a[7], b[7], carry[6],   sum[7], cout);
+  
+  assign carry_into_msb = carry[6];
+  
+endmodule
+
+
+module right_shift(x,y);
+  input [7:0]x;
+  output [7:0]y;
+  
+  assign y[7] = x[7];
+  assign y[6] = x[7]; 
+  assign y[5] = x[6];  
+  assign y[4] = x[5];  
+  assign y[3] = x[4];  
+  assign y[2] = x[3];  
+  assign y[1] = x[2];  
+  assign y[0] = x[1];
+  
+endmodule
+
+
+module left_shift(x,y);
+  input [7:0]x;
+  output [7:0]y;
+  
+  assign y[7] = x[6];
+  assign y[6] = x[5]; 
+  assign y[5] = x[4];
+  assign y[4] = x[3];  
+  assign y[3] = x[2];  
+  assign y[2] = x[1];  
+  assign y[1] = x[0];  
+  assign y[0] = 0;
+  
+endmodule
+
+
+module left_rotate(x,y);
+  input [7:0]x;
+  output [7:0]y;
+  
+  assign y[7] = x[6];
+  assign y[6] = x[5]; 
+  assign y[5] = x[4];
+  assign y[4] = x[3];  
+  assign y[3] = x[2];  
+  assign y[2] = x[1];  
+  assign y[1] = x[0];  
+  assign y[0] = x[7];
+  
+endmodule
+
+
+module right_rotate(x,y);
+  input [7:0]x;
+  output [7:0]y;
+  
+  assign y[7] = x[0];
+  assign y[6] = x[7]; 
+  assign y[5] = x[6];
+  assign y[4] = x[5];  
+  assign y[3] = x[4];  
+  assign y[2] = x[3];  
+  assign y[1] = x[2];  
+  assign y[0] = x[1];
+  
+endmodule
+
+
+module comparison_unit(
+    input [7:0] adder_result,  // Result from A - B calculation
+    output reg [7:0] comparison_result
+);
+    always @(*) begin
+        if (adder_result == 8'b00000000)
+            comparison_result = 8'b00000001;  // Equal
+        else
+            comparison_result = 8'b00000000;  // Not equal
+    end
+endmodule
+
+
+module input_prep(A,B, AluOp, input1_to_adder, input2_to_adder, carry_to_adder);
+  input [7:0]A, B;
+  input [3:0]AluOp;
+  output reg [7:0]input1_to_adder, input2_to_adder;
+  output reg carry_to_adder;
+  
+  wire [7:0] not_A, not_B;
+  wire [7:0] constant_one = 8'b00000001;
+  
+  assign not_A = ~A;
+  assign not_B = ~B;
+  
+  always @(*) begin
+    case(AluOp)
+      // A+B
+      4'b0000: begin
+        input1_to_adder = A;
+        input2_to_adder = B;
+        carry_to_adder = 1'b0;
+      end
+      
+      //B-A
+      4'b0001: begin
+        input1_to_adder = B;
+        input2_to_adder = not_A;
+        carry_to_adder = 1'b1;
+      end
+      
+      //A+1
+      4'b0010: begin
+        input1_to_adder = A;
+        input2_to_adder = constant_one;
+        carry_to_adder = 1'b0;
+      end
+      
+      //A==B
+      4'b0101: begin
+        input1_to_adder = A;
+        input2_to_adder = not_B;
+        carry_to_adder = 1'b1;
+      end
+      
+      default: begin
+        input1_to_adder = 8'b0;
+        input2_to_adder = 8'b0;
+        carry_to_adder = 1'b0;
+      end
+    endcase
+  end
+  
+  
+endmodule
+
+
+module mux_16to1(
+    input [3:0] select,
+    input [7:0] in0, in1, in2, in3, in4, in5, in6, in7,
+    input [7:0] in8, in9, in10, in11, in12, in13, in14, in15,
+    output reg [7:0] out
+);
+    always @(*) begin
+        case(select)
+            // Arithmetic Operations
+            4'b0000: out = in0;  // A + B
+            4'b0001: out = in1;  // B - A
+            4'b0010: out = in2;  // A + 1
+            4'b0101: out = in3;  // A == B
+            
+            // Shift Operations
+            4'b0110: out = in6;  // B << 1
+            4'b0111: out = in7;  // B >> 1
+            
+            // Rotate Operations  
+            4'b1100: out = in14; // A ◇ left
+            4'b1101: out = in15; // A ◇ right
+            
+            // Logic Operations
+            4'b1000: out = in8;  // NOT A
+            4'b1001: out = in9;  // A AND B
+            4'b1010: out = in10; // A OR B
+            4'b1011: out = in11; // A NAND B
+          	
+             default: out = 8'b00000000;
+        endcase
+    end
+endmodule
+
+
+module ALU_8(output [7:0] Result, output Zero, Negative, Overflow,
+input [7:0] A, B, input [3:0] AluOp);
+  
+  wire [7:0] adder_input1, adder_input2;
+  wire adder_carry_in;
+  wire [7:0] adder_result,comparison_result, left_shift_result, right_shift_result;
+  wire [7:0] left_rotate_result, right_rotate_result;
+  wire [7:0] not_result, and_result, or_result, nand_result;
+  
+  input_prep input_define(
+    .A(A),
+    .B(B),
+    .AluOp(AluOp),
+    .input1_to_adder(adder_input1),
+    .input2_to_adder(adder_input2),
+    .carry_to_adder(adder_carry_in)
+  );
+  
+  wire adder_cout, adder_carry_into_msb;
+
+  adder_8bit main_adder(
+      .a(adder_input1),
+      .b(adder_input2),
+      .cin(adder_carry_in), 
+      .sum(adder_result),
+      .cout(adder_cout),
+      .carry_into_msb(adder_carry_into_msb)
+  );
+  
+  comparison_unit comp_unit(.adder_result(adder_result),
+                  .comparison_result(comparison_result)
+  );
+  
+  left_shift left_shifter(.x(B), .y(left_shift_result));
+  
+  right_shift right_shifter(.x(B), .y(right_shift_result)); 
+  
+  left_rotate rotate_left(.x(A), .y(left_rotate_result));
+  
+  right_rotate rotate_right(.x(A), .y(right_rotate_result));
+  
+  logic_unit lu(.A(A),
+                .B(B),
+                .not_out(not_result),
+                .or_out(or_result),
+                .and_out(and_result),
+                .nand_out(nand_result));
+  
+  
+  mux_16to1 result_mux(.select(AluOp),
+                     .in0(adder_result),      // A + B
+                      .in1(adder_result),      // B - A
+                      .in2(adder_result),      // A + 1
+                      .in3(comparison_result), // A == B
+                      .in4(8'b0),              // Unused
+                      .in5(8'b0),              // Unused
+                      .in6(left_shift_result), // B << 1
+                      .in7(right_shift_result),// B >> 1
+                      .in8(not_result),        // NOT A
+                      .in9(and_result),        // A AND B
+                      .in10(or_result),        // A OR B
+                      .in11(nand_result),      // A NAND B
+                      .in12(8'b0),             // Unused
+                      .in13(8'b0),             // Unused
+                      .in14(left_rotate_result), // A ◇ left
+                      .in15(right_rotate_result), // A ◇ right
+
+                       .out(Result) //Final ALU result  
+                      );
+  
+  //Zero Flag
+  assign Zero = (Result == 8'b00000000);
+
+  // Negative Flag
+  assign Negative = Result[7];
+
+  // Overflow Flag
+  wire adder_overflow = adder_carry_into_msb ^ adder_cout;
+  assign Overflow = (AluOp == 4'b0000 || AluOp == 4'b0001) ? adder_overflow : 1'b0;
+  
+  
+endmodule
+
+
+
+//=================================================================
+
+
+module ALU_8_DUT();
+  reg [7:0] A, B;
+    reg [3:0] AluOp;
+    wire [7:0] Result;
+    wire Zero, Negative, Overflow;
+    
+    
+    ALU_8 my_alu (
+        .Result(Result),
+        .Zero(Zero),
+        .Negative(Negative), 
+        .Overflow(Overflow),
+        .A(A),
+        .B(B),
+        .AluOp(AluOp)
+    );
+    
+    initial 
+    begin
+        // Display header
+        $display("==================================================================================");
+      $display("\t====Welcome in my 8-bits ALU====");
+        $display("Time\tAluOp\tA\t\tB\t\tResult\t\tZ N O\tOperation");
+        $display("==================================================================================");
+        
+        // Arithmetic Operations
+      $display("\n=== Arithmatic Operations Testing ===");
+        
+        // A + B (5 + 10 = 15)
+        A = 8'd5; B = 8'd10; AluOp = 4'b0000; #10;
+      $display("%0t\t%b\t%0d\t\t%0d\t\t%0d\t\t%b %b %b\tA+B", $time, AluOp, A, B, Result, Zero, Negative, Overflow);
+        
+        // B - A (10 - 5 = 5)  
+        A = 8'd5; B = 8'd10; AluOp = 4'b0001; #10;
+      $display("%0t\t%b\t%0d\t\t%0d\t\t%0d\t\t%b %b %b\tB-A", $time, AluOp, A, B, Result, Zero, Negative, Overflow);
+        
+        // A + 1 (7 + 1 = 8)
+        A = 8'd7; B = 8'd0; AluOp = 4'b0010; #10;
+      $display("%0t\t%b\t%0d\t\t%0d\t\t%0d\t\t%b %b %b\tA+1", $time, AluOp, A, B, Result, Zero, Negative, Overflow);
+        
+        //Comparison (A == B)
+      $display("\n=== Comparison Testing ===");
+        
+        // A == B (true case)
+        A = 8'd10; B = 8'd10; AluOp = 4'b0101; #10;
+      $display("%0t\t%b\t%0d\t\t%0d\t\t%0d\t\t%b %b %b\tA==B (true)", $time, AluOp, A, B, Result, Zero, Negative, Overflow);
+        
+        // A == B (false case)
+        A = 8'd10; B = 8'd20; AluOp = 4'b0101; #10;
+      $display("%0t\t%b\t%0d\t\t%0d\t\t%0d\t\t%b %b %b\tA==B (false)", $time, AluOp, A, B, Result, Zero, Negative, Overflow);
+        
+        //Shift Operations
+      $display("\n=== Shift Operations Testing ===");
+        
+        // B << 1 (5 << 1 = 10)
+        A = 8'd0; B = 8'd5; AluOp = 4'b0110; #10;
+      $display("%0t\t%b\t%0d\t\t%0d\t\t%0d\t\t%b %b %b\tB<<1", $time, AluOp, A, B, Result, Zero, Negative, Overflow);
+        
+        // B >> 1 (signed -10 >> 1 = -5)
+        A = 8'd0; B = 8'b11110110; // -10 in 2's complement
+        AluOp = 4'b0111; #10;
+      $display("%0t\t%b\t%0d\t\t-10\t\t%0d\t\t%b %b %b\tB>>1", $time, AluOp, A, $signed(B), $signed(Result), Zero, Negative, Overflow);
+        
+        // Rotate Operations
+      $display("\n=== Rotate Operations Testing ===");
+        
+        // A ◇ left (10110010 -> 01100101)
+        A = 8'b10110010; B = 8'd0; AluOp = 4'b1100; #10;
+      $display("%0t\t%b\t%b\t%b\t%b\t%b %b %b\tA◇left", $time, AluOp, A, B, Result, Zero, Negative, Overflow);
+        
+        // A ◇ right (10110010 -> 01011001)  
+        A = 8'b10110010; B = 8'd0; AluOp = 4'b1101; #10;
+      $display("%0t\t%b\t%b\t%b\t%b\t%b %b %b\tA◇right", $time, AluOp, A, B, Result, Zero, Negative, Overflow);
+        
+        // Logic Operations
+      $display("\n=== Logic Operations Testing ===");
+        
+        // NOT A
+        A = 8'b11001100; B = 8'd0; AluOp = 4'b1000; #10;
+      $display("%0t\t%b\t%b\t%b\t%b\t%b %b %b\tNOT A", $time, AluOp, A, B, Result, Zero, Negative, Overflow);
+        
+        // A AND B
+        A = 8'b11001100; B = 8'b10101010; AluOp = 4'b1001; #10;
+      $display("%0t\t%b\t%b\t%b\t%b\t%b %b %b\tA AND B", $time, AluOp, A, B, Result, Zero, Negative, Overflow);
+        
+        // A OR B
+        A = 8'b11001100; B = 8'b10101010; AluOp = 4'b1010; #10;
+      $display("%0t\t%b\t%b\t%b\t%b\t%b %b %b\tA OR B", $time, AluOp, A, B, Result, Zero, Negative, Overflow);
+        
+        // A NAND B
+        A = 8'b11001100; B = 8'b10101010; AluOp = 4'b1011; #10;
+      $display("%0t\t%b\t%b\t%b\t%b\t%b %b %b\tA NAND B", $time, AluOp, A, B, Result, Zero, Negative, Overflow);
+        
+        // Flag Testing
+      $display("\n=== Flag Testing ===");
+        
+        // Test Zero flag (0 + 0 = 0)
+        A = 8'd0; B = 8'd0; AluOp = 4'b0000; #10;
+      $display("%0t\t%b\t%0d\t\t%0d\t\t%0d\t\t%b %b %b\tZero flag test", $time, AluOp, A, B, Result, Zero, Negative, Overflow);
+        
+        // Test Negative flag (negative result)
+        A = 8'd5; B = 8'd10; AluOp = 4'b0001; #10; // 5 - 10 = -5
+      $display("%0t\t%b\t%0d\t\t%0d\t\t%0d\t\t%b %b %b\tNegative flag test", $time, AluOp, A, B, $signed(Result), Zero, Negative, Overflow);
+        
+        // Test Overflow flag (127 + 1 = overflow)
+        A = 8'd127; B = 8'd1; AluOp = 4'b0000; #10;
+      $display("%0t\t%b\t%0d\t\t%0d\t\t%0d\t\t%b %b %b\tOverflow test", $time, AluOp, A, B, $signed(Result), Zero, Negative, Overflow);
+        
+      $display("\n=== Test Complete, Thank you ===");
+        $finish;
+    end
+    
+endmodule
